@@ -10,21 +10,21 @@ import util
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint_path", type=str)
-    parser.add_argument("--input_file", type=str)
-    parser.add_argument("--corpus_file", type=str)
-    parser.add_argument("--output_file", type=str)
+    parser.add_argument("--input_file", type=str, default="data/dataset.csv")
+    parser.add_argument("--corpus_file", type=str, default=None)
+    parser.add_argument("--output_file", type=str, default="prediction/result.jsonl")
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--device", default=0, type=int)
     parser.add_argument("--num_workers", default=4, type=int)
-    parser.add_argument("--mydata", default=0, type=int)
+    parser.add_argument("--mydata", default=1, type=int)
     parser.add_argument(
         "--no_nei", action="store_true", help="If given, never predict NEI."
     )
-    parser.add_argument(
-        "--force_rationale",
-        action="store_true",
-        help="If given, always predict a rationale for non-NEI.",
-    )
+    # parser.add_argument(
+    #     "--force_rationale",
+    #     action="store_true",
+    #     help="If given, always predict a rationale for non-NEI.",
+    # )
     parser.add_argument("--debug", action="store_true")
 
     return parser.parse_args()

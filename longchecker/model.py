@@ -8,7 +8,7 @@ from torch import nn
 from torch.nn import functional as F
 import transformers
 from transformers.optimization import get_linear_schedule_with_warmup
-from pytorch_lightning.core.decorators import auto_move_data
+#from pytorch_lightning.core.decorators import auto_move_data
 
 from transformers import LongformerModel
 
@@ -19,35 +19,35 @@ from metrics import SciFactMetrics
 import util
 
 
-def masked_binary_cross_entropy_with_logits(input, target, weight, rationale_mask):
-    """
-    Binary cross entropy loss. Ignore values where the target is -1. Compute
-    loss as a "mean of means", first taking the mean over the sentences in each
-    row, and then over all the rows.
-    """
-    # Mask to indicate which values contribute to loss.
-    mask = torch.where(target > -1, 1, 0)
-
-    # Need to convert target to float, and set -1 values to 0 in order for the
-    # computation to make sense. We'll ignore the -1 values later.
-    float_target = target.clone().to(torch.float)
-    float_target[float_target == -1] = 0
-    losses = F.binary_cross_entropy_with_logits(
-        input, float_target, reduction="none")
-    # Mask out the values that don't matter.
-    losses = losses * mask
-
-    # Take "sum of means" over the sentence-level losses for each instance.
-    # Take means so that long documents don't dominate.
-    # Multiply by `rationale_mask` to ignore sentences where we don't have
-    # rationale annotations.
-    n_sents = mask.sum(dim=1)
-    totals = losses.sum(dim=1)
-    means = totals / n_sents
-    final_loss = (means * weight * rationale_mask).sum()
-
-    return final_loss
-
+# def masked_binary_cross_entropy_with_logits(input, target, weight, rationale_mask):
+#     """
+#     Binary cross entropy loss. Ignore values where the target is -1. Compute
+#     loss as a "mean of means", first taking the mean over the sentences in each
+#     row, and then over all the rows.
+#     """
+#     # Mask to indicate which values contribute to loss.
+#     mask = torch.where(target > -1, 1, 0)
+#
+#     # Need to convert target to float, and set -1 values to 0 in order for the
+#     # computation to make sense. We'll ignore the -1 values later.
+#     float_target = target.clone().to(torch.float)
+#     float_target[float_target == -1] = 0
+#     losses = F.binary_cross_entropy_with_logits(
+#         input, float_target, reduction="none")
+#     # Mask out the values that don't matter.
+#     losses = losses * mask
+#
+#     # Take "sum of means" over the sentence-level losses for each instance.
+#     # Take means so that long documents don't dominate.
+#     # Multiply by `rationale_mask` to ignore sentences where we don't have
+#     # rationale annotations.
+#     n_sents = mask.sum(dim=1)
+#     totals = losses.sum(dim=1)
+#     means = totals / n_sents
+#     final_loss = (means * weight * rationale_mask).sum()
+#
+#     return final_loss
+t = 0
 
 class LongCheckerModel(pl.LightningModule):
     """
@@ -110,7 +110,7 @@ class LongCheckerModel(pl.LightningModule):
         fold_names = ["train", "valid", "test"]
         metrics = {}
         for name in fold_names:
-            metrics[f"metrics_{name}"] = SciFactMetrics(compute_on_step=False)
+            metrics[f"metrics_{name}"] = SciFactMetrics()
 
         self.metrics = nn.ModuleDict(metrics)
 
@@ -208,28 +208,28 @@ class LongCheckerModel(pl.LightningModule):
 
         # Make rationale predictions
         # Need to invoke `continguous` or `batched_index_select` can fail.
-        hidden_states = self.dropout(encoded.last_hidden_state).contiguous()
-        sentence_states = batched_index_select(hidden_states, abstract_sent_idx)
+        #hidden_states = self.dropout(encoded.last_hidden_state).contiguous()
+        #sentence_states = batched_index_select(hidden_states, abstract_sent_idx)
 
         # Concatenate the CLS token with the sentence states.
-        pooled_rep = pooled_output.unsqueeze(1).expand_as(sentence_states)
+        # pooled_rep = pooled_output.unsqueeze(1).expand_as(sentence_states)
         # [n_documents x max_n_sentences x (2 * encoder_hidden_dim)]
-        rationale_input = torch.cat([pooled_rep, sentence_states], dim=2)
-        # Squeeze out dim 2 (the encoder dim).
-        # [n_documents x max_n_sentences]
-        rationale_logits = self.rationale_classifier(rationale_input).squeeze(2)
-
-        # Predict rationales.
-        # [n_documents x max_n_sentences]
-        rationale_probs = torch.sigmoid(rationale_logits).detach()
-        predicted_rationales = (rationale_probs >= self.rationale_threshold).to(torch.int64)
+        # rationale_input = torch.cat([pooled_rep, sentence_states], dim=2)
+        # # Squeeze out dim 2 (the encoder dim).
+        # # [n_documents x max_n_sentences]
+        # rationale_logits = self.rationale_classifier(rationale_input).squeeze(2)
+        #
+        # # Predict rationales.
+        # # [n_documents x max_n_sentences]
+        # rationale_probs = torch.sigmoid(rationale_logits).detach()
+        # predicted_rationales = (rationale_probs >= self.rationale_threshold).to(torch.int64)
 
         return {"label_logits": label_logits,
-                "rationale_logits": rationale_logits,
+                #"rationale_logits": rationale_logits,
                 "label_probs": label_probs,
-                "rationale_probs": rationale_probs,
-                "predicted_labels": predicted_labels,
-                "predicted_rationales": predicted_rationales}
+                #"rationale_probs": rationale_probs,
+                "predicted_labels": predicted_labels}#,
+                #"predicted_rationales": predicted_rationales}
 
     def training_step(self, batch, batch_idx):
         """"
@@ -259,19 +259,29 @@ class LongCheckerModel(pl.LightningModule):
 
         return loss"""
         res = self(batch["tokenized"], batch["abstract_sent_idx"])
-
+        global t
+        t+=1
+        if t == 10:
+            print(res["label_logits"])
+            print(batch["label"])
         # Loss for label prediction.
         label_loss = F.cross_entropy(
             res["label_logits"], batch["label"], reduction="none")
         # Take weighted average of per-sample losses.
-        label_loss = (batch["weight"] * label_loss).sum()
+        label_loss = label_loss.sum()           #  batch["weight"] *
         self.log("label_loss", label_loss)
+
+        self._invoke_metrics(res, batch, "train")
 
         return label_loss
 
     def validation_step(self, batch, batch_idx):
         pred = self(batch["tokenized"], batch["abstract_sent_idx"])
+        val_loss = F.cross_entropy(pred["label_logits"], batch["label"], reduction="none")
+        self.log("val_loss", val_loss)
+
         self._invoke_metrics(pred, batch, "valid")
+        return val_loss
 
     def validation_epoch_end(self, outs):
         "Log metrics at end of validation."
@@ -300,7 +310,7 @@ class LongCheckerModel(pl.LightningModule):
         # We won't need gradients.
         detached = {k: v.detach() for k, v in pred.items()}
         # Invoke the metrics appropriate for this fold.
-        self.metrics[f"metrics_{fold}"](detached, batch)
+        self.metrics[f"metrics_{fold}"].update(detached, batch)
 
     def _log_metrics(self, fold):
         "Log metrics for this epoch."
@@ -319,13 +329,19 @@ class LongCheckerModel(pl.LightningModule):
         optimizer = transformers.AdamW(self.parameters(), lr=self.lr)
 
         # If we're debugging, just use the vanilla optimizer.
-        if hparams.fast_dev_run or hparams.debug:
+        if hparams.fast_dev_run:
             return optimizer
+
+        if hparams.gpus is None:
+            hparams.gpus = 1
+
+        if hparams.accumulate_grad_batches is None:
+            hparams.accumulate_grad_batches = 1
 
         # Calculate total number of training steps, for the optimizer.
         steps_per_epoch = math.ceil(
             hparams.num_training_instances /
-            (hparams.gpus * hparams.train_batch_size * hparams.accumulate_grad_batches))
+            (hparams.gpus * hparams.batch_size * hparams.accumulate_grad_batches))
 
         if hparams.scheduler_total_epochs is not None:
             n_epochs = hparams.scheduler_total_epochs
@@ -344,7 +360,7 @@ class LongCheckerModel(pl.LightningModule):
 
         return res
 
-    @auto_move_data
+    #@auto_move_data
     def predict(self, batch, force_rationale=False):
         """
         Make predictions on a batch passed in from the dataloader.

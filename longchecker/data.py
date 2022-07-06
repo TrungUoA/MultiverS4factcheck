@@ -2,11 +2,13 @@ import pandas as pd
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
-import torch
+
 from nltk import tokenize
 
 import util
-
+import torch
+import gc
+MAX_LEN = 1024
 
 def get_tokenizer():
     "Need to add a few special tokens to the default longformer checkpoint."
@@ -44,6 +46,7 @@ class LongCheckerDataset(Dataset):
         res = {
             "claim_id": entry["claim_id"],
             "abstract_id": entry["abstract_id"],
+            "label": self.label_lookup[ entry["label"] ]
         }
         tensorized = self._tensorize(**entry["to_tensorize"])
         res.update(tensorized)
@@ -110,15 +113,20 @@ class LongCheckerReader:
     def __init__(self, predict_args):
         self.data_file = predict_args.input_file
         self.corpus_file = predict_args.corpus_file
+        self.train_file = predict_args.train_file
+        self.val_file = predict_args.val_file
         # Basically, I used two different sets of labels. This was dumb, but
         # doing this mapping fixes it.
         self.label_map = {"supported": "SUPPORTS",
                           "refuted": "REFUTES", "nei": "NOT ENOUGH INFO"}
 
-    def get_mydata(self, tokenizer):
+    def get_mydata(self, tokenizer, train_data=True):
         """ Get our data """
-        # if the csv file is too large, consider reading as an iterable object with chunksize argument
-        data = pd.read_csv(self.data_file)      # chunksize
+        # if the csv file is too large, consider reading it as an iterable object with the chunksize argument
+        if train_data:
+            data = pd.read_csv(self.train_file, nrows=10000)      # chunksize
+        else:
+            data = pd.read_csv(self.val_file, nrows=200)
         data.rename(columns={data.columns[0]: 'id'}, inplace=True)
         #data.insert(1, 'abstract_id', data['claim_id'], True)
         #res = data.to_dict('records')
@@ -129,7 +137,7 @@ class LongCheckerReader:
                              #"title": candidate_doc["title"]}
             entry = {"claim_id": row["id"],
                      "abstract_id": row["id"],
-                     "label": row["label"],
+                     "label": self.label_map[ row["label"] ],
                      "to_tensorize": to_tensorize}
             res.append(entry)
         return LongCheckerDataset(res, tokenizer)
@@ -170,6 +178,7 @@ class Collator:
         res = {
             "claim_id": self._collate_scalar(batch, "claim_id"),
             "abstract_id": self._collate_scalar(batch, "abstract_id"),
+            "label": self._collate_scalar(batch, "label"),
             "tokenized": self._pad_tokenized([x["tokenized"] for x in batch]),
             "abstract_sent_idx": self._pad_field(batch, "abstract_sent_idx", 0),
         }
@@ -217,12 +226,12 @@ class Collator:
         return torch.tensor(res)
 
 
-def get_dataloader(predict_args):
+def get_dataloader(predict_args, train_data=True):
     "Main entry point to get the data loader. This can only be used at test time."
     reader = LongCheckerReader(predict_args)
     tokenizer = get_tokenizer()
     if predict_args.mydata:
-        ds = reader.get_mydata(tokenizer)
+        ds = reader.get_mydata(tokenizer, train_data)
     else:
         ds = reader.get_data(tokenizer)
     collator = Collator(tokenizer)
