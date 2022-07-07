@@ -47,7 +47,7 @@ import util
 #     final_loss = (means * weight * rationale_mask).sum()
 #
 #     return final_loss
-t = 0
+
 
 class LongCheckerModel(pl.LightningModule):
     """
@@ -259,11 +259,7 @@ class LongCheckerModel(pl.LightningModule):
 
         return loss"""
         res = self(batch["tokenized"], batch["abstract_sent_idx"])
-        global t
-        t+=1
-        if t == 10:
-            print(res["label_logits"])
-            print(batch["label"])
+
         # Loss for label prediction.
         label_loss = F.cross_entropy(
             res["label_logits"], batch["label"], reduction="none")
@@ -272,7 +268,7 @@ class LongCheckerModel(pl.LightningModule):
         self.log("label_loss", label_loss)
 
         self._invoke_metrics(res, batch, "train")
-
+        #gc.collect()
         return label_loss
 
     def validation_step(self, batch, batch_idx):
@@ -297,8 +293,9 @@ class LongCheckerModel(pl.LightningModule):
     def test_epoch_end(self, outs):
         "Log metrics at end of test."
         # As above, log the train metrics together with the test metrics.
-        self._log_metrics("train")
-        self._log_metrics("test")
+        #self._log_metrics("train")
+        #self._log_metrics("test")
+        pass
 
     def _invoke_metrics(self, pred, batch, fold):
         """
@@ -332,16 +329,13 @@ class LongCheckerModel(pl.LightningModule):
         if hparams.fast_dev_run:
             return optimizer
 
-        if hparams.gpus is None:
-            hparams.gpus = 1
-
         if hparams.accumulate_grad_batches is None:
             hparams.accumulate_grad_batches = 1
 
         # Calculate total number of training steps, for the optimizer.
         steps_per_epoch = math.ceil(
             hparams.num_training_instances /
-            (hparams.gpus * hparams.batch_size * hparams.accumulate_grad_batches))
+            (int(hparams.devices) * hparams.batch_size * hparams.accumulate_grad_batches))
 
         if hparams.scheduler_total_epochs is not None:
             n_epochs = hparams.scheduler_total_epochs
@@ -391,25 +385,23 @@ class LongCheckerModel(pl.LightningModule):
             predicted_label = label_lookup[this_output["predicted_labels"]]
 
             # Due to minibatching, may need to get rid of padding sentences.
-            rationale_ix = this_instance["abstract_sent_idx"] > 0
-            rationale_indicators = this_output["predicted_rationales"][rationale_ix]
-            predicted_rationale = rationale_indicators.nonzero()[0].tolist()
-            # Need to convert from numpy data type to native python.
-            predicted_rationale = [int(x) for x in predicted_rationale]
+            # rationale_ix = this_instance["abstract_sent_idx"] > 0
+            # rationale_indicators = this_output["predicted_rationales"][rationale_ix]
+            # predicted_rationale = rationale_indicators.nonzero()[0].tolist()
+            # # Need to convert from numpy data type to native python.
+            # predicted_rationale = [int(x) for x in predicted_rationale]
 
             # If we're forcing a rationale, then if the predicted label is not "NEI"
             # take the highest-scoring sentence as a rationale.
-            if predicted_label != "NEI" and not predicted_rationale and force_rationale:
-                candidates = this_output["rationale_probs"][rationale_ix]
-                predicted_rationale = [candidates.argmax()]
+            # if predicted_label != "NEI" and not predicted_rationale and force_rationale:
+            #     candidates = this_output["rationale_probs"][rationale_ix]
+            #     predicted_rationale = [candidates.argmax()]
 
             res = {
                 "claim_id": int(this_instance["claim_id"]),
                 "abstract_id": int(this_instance["abstract_id"]),
                 "predicted_label": predicted_label,
-                "predicted_rationale": predicted_rationale,
-                "label_probs": this_output["label_probs"],
-                "rationale_probs": this_output["rationale_probs"][rationale_ix]
+                "label_probs": this_output["label_probs"]
             }
             predictions.append(res)
 

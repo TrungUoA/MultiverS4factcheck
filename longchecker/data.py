@@ -7,12 +7,14 @@ from nltk import tokenize
 
 import util
 import torch
-import gc
-MAX_LEN = 1024
+import random
+
+
+MAX_LEN = 512
 
 def get_tokenizer():
     "Need to add a few special tokens to the default longformer checkpoint."
-    tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-large-4096")
+    tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-large-4096", model_max_length=MAX_LEN)
     ADDITIONAL_TOKENS = {
         "section_start": "<|sec|>",
         "section_end": "</|sec|>",
@@ -70,12 +72,12 @@ class LongCheckerDataset(Dataset):
         cited_text = self.tokenizer.eos_token.join(sentences)
         if title is not None:
             cited_text = title + self.tokenizer.eos_token + cited_text
-        tokenized = self.tokenizer(claim + self.tokenizer.eos_token + cited_text)
+        tokenized = self.tokenizer(claim + self.tokenizer.eos_token + cited_text, truncation=True, max_length=MAX_LEN)
         tokenized["global_attention_mask"] = self._get_global_attention_mask(tokenized)
         abstract_sent_idx = self._get_abstract_sent_tokens(tokenized, title)
 
         # Make sure we've got the right number of abstract sentence tokens.
-        assert len(abstract_sent_idx) == len(sentences)
+        assert len(abstract_sent_idx) == len(sentences) or len(tokenized['input_ids']) == MAX_LEN
 
         return tokenized, abstract_sent_idx
 
@@ -124,9 +126,9 @@ class LongCheckerReader:
         """ Get our data """
         # if the csv file is too large, consider reading it as an iterable object with the chunksize argument
         if train_data:
-            data = pd.read_csv(self.train_file, nrows=10000)      # chunksize
+            data = pd.read_csv(self.train_file)      # chunksize for iterable, nrows=5000) for debug
         else:
-            data = pd.read_csv(self.val_file, nrows=200)
+            data = pd.read_csv(self.val_file)    # nrows=1000
         data.rename(columns={data.columns[0]: 'id'}, inplace=True)
         #data.insert(1, 'abstract_id', data['claim_id'], True)
         #res = data.to_dict('records')
@@ -140,6 +142,7 @@ class LongCheckerReader:
                      "label": self.label_map[ row["label"] ],
                      "to_tensorize": to_tensorize}
             res.append(entry)
+        random.shuffle(res)
         return LongCheckerDataset(res, tokenizer)
 
     def get_data(self, tokenizer):

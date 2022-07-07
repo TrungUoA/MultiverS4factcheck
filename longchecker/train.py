@@ -18,6 +18,8 @@ from data import *
 #import lib.longformer.data as dm
 #from lib.longformer.model import SciFactModel
 
+SEED = 2022
+
 
 def get_timestamp():
     "Store a timestamp for when training started."
@@ -100,7 +102,7 @@ def parse_args():
     parser.add_argument("--result_dir", type=str, default="results/lightning_logs")
     parser.add_argument("--experiment_name", type=str, default="training_longformer")
     parser.add_argument("--batch_size", type=int, default=4)
-    parser.add_argument("--num_workers", type=int, default=4)
+    parser.add_argument("--num_workers", type=int, default=8)
     parser.add_argument("--mydata", type=int, default=1)
     #parser.add_argument("--accelerator", type=str, default='gpu')
     parser = pl.Trainer.add_argparse_args(parser)
@@ -114,7 +116,7 @@ def parse_args():
 
 
 def main():
-    pl.seed_everything(76)
+    pl.seed_everything(SEED)
 
     args = parse_args()
 
@@ -161,7 +163,7 @@ def main():
     # Create trainer and fit the model.
     # Need `find_unused_paramters=True` to keep training from randomly hanging.
     trainer = pl.Trainer.from_argparse_args(
-        args, callbacks=trainer_callbacks, logger=loggers, strategy=strategy)
+        args, callbacks=trainer_callbacks, logger=loggers, strategy=strategy, check_val_every_n_epoch=1)
 
     # If asked to scale the batch size, tune instead of fitting.
     #if args.auto_scale_batch_size:
@@ -169,10 +171,10 @@ def main():
     #    trainer.tune(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
     #else:
 
-    gc.collect()
-    torch.cuda.empty_cache()
     trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
-
+    print("Evaluating...")
+    trainer.test(model, dataloaders=val_dataloader, verbose=True)
+    print("Accuracy:" + str(model.metrics[f"metrics_test"].correct_label))
 
 if __name__ == "__main__":
     main()
