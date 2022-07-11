@@ -147,9 +147,9 @@ def main():
 
     # Checkpointing.
     checkpoint_callback = callbacks.ModelCheckpoint(
-        monitor="val_loss", mode="min", save_top_k=1, save_last=True,
+        monitor="val_acc", mode="max", save_top_k=1, save_last=True,
         dirpath=checkpoint_dir)
-    early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=0.00, patience=3, verbose=False, mode="min")
+    early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=8, verbose=False, mode="max")
     lr_callback = callbacks.LearningRateMonitor(logging_interval="step")
     gpu_callback = callbacks.DeviceStatsMonitor()
     trainer_callbacks = [early_stop_callback, checkpoint_callback, lr_callback, gpu_callback]
@@ -174,7 +174,7 @@ def main():
     trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
     print("Evaluating...")
     trainer.test(model, dataloaders=val_dataloader, verbose=True)
-    print("Accuracy:" + str(model.metrics[f"metrics_test"].correct_label))
+    print("Accuracy:" + str(model.metrics[f"metrics_test"].correct_label/len(val_dataloader.dataset)))
 
 if __name__ == "__main__":
     main()

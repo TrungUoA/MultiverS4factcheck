@@ -273,11 +273,12 @@ class LongCheckerModel(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         pred = self(batch["tokenized"], batch["abstract_sent_idx"])
-        val_loss = F.cross_entropy(pred["label_logits"], batch["label"], reduction="none")
-        self.log("val_loss", val_loss)
+        #val_loss = F.cross_entropy(pred["label_logits"], batch["label"], reduction="none")
+        #self.log("val_loss", val_loss)
 
         self._invoke_metrics(pred, batch, "valid")
-        return val_loss
+        val_acc = torch.sum( pred["predicted_labels"].detach() == batch["label"], dtype=torch.float )/batch["label"].shape[0]
+        return val_acc
 
     def validation_epoch_end(self, outs):
         "Log metrics at end of validation."
@@ -285,17 +286,23 @@ class LongCheckerModel(pl.LightningModule):
         # metrics at the same time, even if we validate multiple times an epoch.
         self._log_metrics("train")
         self._log_metrics("valid")
+        avg_accuracy = torch.stack(outs).mean()
+        self.log("val_acc", avg_accuracy)
 
     def test_step(self, batch, batch_idx):
         pred = self(batch["tokenized"], batch["abstract_sent_idx"])
         self._invoke_metrics(pred, batch, "test")
 
-    def test_epoch_end(self, outs):
-        "Log metrics at end of test."
-        # As above, log the train metrics together with the test metrics.
+        test_acc = torch.sum(pred["predicted_labels"].detach() == batch["label"], dtype=torch.float) / \
+                batch["label"].shape[0]
+        self.log("test_acc", test_acc)
+        return test_acc
+
+    #def test_epoch_end(self, outs):
+        #"Log metrics at end of test."
+        ## As above, log the train metrics together with the test metrics.
         #self._log_metrics("train")
         #self._log_metrics("test")
-        pass
 
     def _invoke_metrics(self, pred, batch, fold):
         """
