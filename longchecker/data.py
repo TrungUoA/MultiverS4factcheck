@@ -3,11 +3,8 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
-from nltk import tokenize
-
 import util
 import torch
-import random
 
 
 MAX_LEN = 512
@@ -115,35 +112,29 @@ class LongCheckerReader:
     def __init__(self, predict_args):
         self.data_file = predict_args.input_file
         self.corpus_file = predict_args.corpus_file
-        self.train_file = predict_args.train_file
-        self.val_file = predict_args.val_file
         # Basically, I used two different sets of labels. This was dumb, but
         # doing this mapping fixes it.
         self.label_map = {"supported": "SUPPORTS",
                           "refuted": "REFUTES", "nei": "NOT ENOUGH INFO"}
 
-    def get_mydata(self, tokenizer, train_data=True):
+    def get_mydata(self, tokenizer, data_path, val_file=None, val_div=False):
         """ Get our data """
         # if the csv file is too large, consider reading it as an iterable object with the chunksize argument
-        if train_data:
-            data = pd.read_csv(self.train_file)      # chunksize for iterable, nrows=5000) for debug
-        else:
-            data = pd.read_csv(self.val_file)    # nrows=1000
+        data = pd.read_csv(data_path)
         data.rename(columns={data.columns[0]: 'id'}, inplace=True)
-        #data.insert(1, 'abstract_id', data['claim_id'], True)
-        #res = data.to_dict('records')
-        res = []
-        for _, row in data.iterrows():
-            to_tensorize = { "claim": row["claim"],
-                             "sentences": tokenize.sent_tokenize(row["exp"]) }
-                             #"title": candidate_doc["title"]}
-            entry = {"claim_id": row["id"],
-                     "abstract_id": row["id"],
-                     "label": self.label_map[ row["label"] ],
-                     "to_tensorize": to_tensorize}
-            res.append(entry)
-        random.shuffle(res)
-        return LongCheckerDataset(res, tokenizer)
+        if val_div:
+            if val_file is None:
+                train_df, val_df = util.divide_train_val(data, train_frac=0.933)
+            else:
+                val_data = pd.read_csv(data_path)
+                val_data.rename(columns={val_data.columns[0]: 'id'}, inplace=True)
+                train_df = util.divide_train_val(data, train_frac=1)
+                val_df = util.divide_train_val(val_data, train_frac=1)
+            train_lcds = LongCheckerDataset(util.convert_df2list(train_df, self.label_map), tokenizer)
+            val_lcds = LongCheckerDataset(util.convert_df2list(val_df, self.label_map), tokenizer)
+            return train_lcds, val_lcds
+
+        return LongCheckerDataset(util.convert_df2list(data, self.label_map), tokenizer)
 
     def get_data(self, tokenizer):
         """
@@ -229,12 +220,12 @@ class Collator:
         return torch.tensor(res)
 
 
-def get_dataloader(predict_args, train_data=True):
+def get_dataloader(predict_args, data_file=None):
     "Main entry point to get the data loader. This can only be used at test time."
     reader = LongCheckerReader(predict_args)
     tokenizer = get_tokenizer()
-    if predict_args.mydata:
-        ds = reader.get_mydata(tokenizer, train_data)
+    if predict_args.mydata or data_file is not None:
+        ds = reader.get_mydata(tokenizer, data_file)
     else:
         ds = reader.get_data(tokenizer)
     collator = Collator(tokenizer)
@@ -244,3 +235,12 @@ def get_dataloader(predict_args, train_data=True):
                       collate_fn=collator,
                       shuffle=False,
                       pin_memory=True)
+
+def get_dataloaders(predict_args, data_file):
+    "Main entry point to get the data loader. This can only be used at test time."
+    reader = LongCheckerReader(predict_args)
+    tokenizer = get_tokenizer()
+    datasets = reader.get_mydata(tokenizer, data_file, val_div=True)
+    collator = Collator(tokenizer)
+    return [DataLoader(ds, num_workers=predict_args.num_workers, batch_size=predict_args.batch_size,
+                       collate_fn=collator, shuffle=False, pin_memory=True) for ds in datasets]

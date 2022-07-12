@@ -92,10 +92,11 @@ def get_num_training_instances(args):
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument("--input_file", type=str, default="data/dataset.csv")
+    parser.add_argument("--input_file", type=str, default=None)
     parser.add_argument("--corpus_file", type=str, default=None)
-    parser.add_argument("--train_file", type=str, default="data/train_med_fact.csv")
-    parser.add_argument("--val_file", type=str, default="data/train_med_fact.csv")
+    parser.add_argument("--train_file", type=str, default="data/train.csv")
+    parser.add_argument("--val_file", type=str, default="data/val.csv")
+    parser.add_argument("--test_file", type=str, default="data/test.csv")
     parser.add_argument("--slurm_job_id", type=int, default=None)
     parser.add_argument("--starting_checkpoint", type=str, default="checkpoints/fever_sci.ckpt")
     #parser.add_argument("--monitor", type=str, default="valid_sentence_label_f1")
@@ -122,8 +123,8 @@ def main():
 
     # Get the appropriate dataset.
     #data_module = dm.ConcatDataModule(args)
-    train_dataloader = get_dataloader(args, True)
-    val_dataloader = get_dataloader(args, False)
+    train_dataloader, val_dataloader = get_dataloaders(args, args.train_file)
+    test_dataloader = get_dataloader(args, args.test_file)
 
     args.num_training_instances = len(train_dataloader.dataset) #get_num_training_instances(args)
 
@@ -149,7 +150,7 @@ def main():
     checkpoint_callback = callbacks.ModelCheckpoint(
         monitor="val_acc", mode="max", save_top_k=1, save_last=True,
         dirpath=checkpoint_dir)
-    early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=8, verbose=False, mode="max")
+    early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=10, verbose=False, mode="max")
     lr_callback = callbacks.LearningRateMonitor(logging_interval="step")
     gpu_callback = callbacks.DeviceStatsMonitor()
     trainer_callbacks = [early_stop_callback, checkpoint_callback, lr_callback, gpu_callback]
@@ -173,7 +174,7 @@ def main():
 
     trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
     print("Evaluating...")
-    trainer.test(model, dataloaders=val_dataloader, verbose=True)
+    trainer.test(model, dataloaders=test_dataloader, verbose=True)
     print("Accuracy:" + str(model.metrics[f"metrics_test"].correct_label/len(val_dataloader.dataset)))
 
 if __name__ == "__main__":

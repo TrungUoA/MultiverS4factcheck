@@ -296,7 +296,6 @@ class LongCheckerModel(pl.LightningModule):
         test_acc = torch.sum(pred["predicted_labels"].detach() == batch["label"], dtype=torch.float) / \
                 batch["label"].shape[0]
         self.log("test_acc", test_acc)
-        return test_acc
 
     #def test_epoch_end(self, outs):
         #"Log metrics at end of test."

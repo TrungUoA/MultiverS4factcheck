@@ -7,7 +7,38 @@ import numpy as np
 import pathlib
 import os
 import torch
+import pandas as pd
+from random import shuffle
 
+from nltk.tokenize import sent_tokenize
+
+def divide_train_val(data, train_frac=0.9):
+    train_subsets = []
+    val_subsets = []
+    for k in data["label"].unique():
+        data_k = data[data["label"] == k]
+        train_data_k = data_k.sample(frac=train_frac)
+        val_data_k = pd.concat([data_k, train_data_k]).drop_duplicates(keep=False)
+        train_subsets.append(train_data_k)
+        val_subsets.append(val_data_k)
+    train_data = pd.concat(train_subsets, axis=0)
+    val_data = pd.concat(val_subsets, axis=0)
+
+    return train_data, val_data
+
+def convert_df2list(data, label_map):
+    res = []
+    for _, row in data.iterrows():
+        to_tensorize = {"claim": row["claim"],
+                        "sentences": sent_tokenize(row["exp"])}
+        # "title": candidate_doc["title"]}
+        entry = {"claim_id": row["id"],
+                 "abstract_id": row["id"],
+                 "label": label_map[row["label"]],
+                 "to_tensorize": to_tensorize}
+        res.append(entry)
+    shuffle(res)
+    return res
 
 def load_jsonl(fname, max_lines=None):
     res = []
