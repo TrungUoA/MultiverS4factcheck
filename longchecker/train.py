@@ -103,7 +103,7 @@ def parse_args():
     parser.add_argument("--result_dir", type=str, default="results/lightning_logs")
     parser.add_argument("--experiment_name", type=str, default="training_longformer")
     parser.add_argument("--batch_size", type=int, default=4)
-    parser.add_argument("--num_workers", type=int, default=8)
+    parser.add_argument("--num_workers", type=int, default=0)
     parser.add_argument("--mydata", type=int, default=1)
     #parser.add_argument("--accelerator", type=str, default='gpu')
     parser = pl.Trainer.add_argparse_args(parser)

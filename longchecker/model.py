@@ -104,7 +104,7 @@ class LongCheckerModel(pl.LightningModule):
             dropout=dropouts)
 
         # Learning rates.
-        self.lr = hparams.lr
+        self.lr = 2.5e-6 #hparams.lr #5e-6 works better
 
         # Metrics
         fold_names = ["train", "valid", "test"]
@@ -287,7 +287,7 @@ class LongCheckerModel(pl.LightningModule):
         self._log_metrics("train")
         self._log_metrics("valid")
         avg_accuracy = torch.stack(outs).mean()
-        self.log("val_acc", avg_accuracy)
+        self.log("val_acc", avg_accuracy, prog_bar=True)
 
     def test_step(self, batch, batch_idx):
         pred = self(batch["tokenized"], batch["abstract_sent_idx"])
