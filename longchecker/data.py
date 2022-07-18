@@ -166,10 +166,9 @@ class LongCheckerReader:
         if(len(evidences)) == 0:
             return "NOT ENOUGH INFO"
 
-        evidence = evidences[str(doc_id)]
-        if(len(evidence)) == 0:
+        if str(doc_id) not in evidences.keys() or (len(evidences[str(doc_id)])) == 0:
             return "NOT ENOUGH INFO"
-        votes = [self.label_map[ev["label"]] for ev in evidence]
+        votes = [self.label_map[ev["label"]] for ev in evidences[str(doc_id)]]
         assert len(set(votes)) == 1
         return max(set(votes), key=votes.count)
 
