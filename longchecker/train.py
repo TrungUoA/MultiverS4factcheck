@@ -13,6 +13,7 @@ from argparse import ArgumentParser
 import torch
 
 from model import LongCheckerModel
+import gc
 
 from data import *
 #import lib.longformer.data as dm
@@ -78,18 +79,6 @@ def get_folder_names(args):
     return save_dir, name, version, checkpoint_dir
 
 
-def get_num_training_instances(args):
-    """
-    Need to hard-code the number of training instances for each dataset so that
-    we can set the optimizer correctly.
-    """
-    # Need to load in and set up the datset to figure out how many instances.
-    data_module = dm.ConcatDataModule(args)
-    data_module.setup()
-
-    return len(data_module.folds["train"])
-
-
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument("--input_file", type=str, default=None)
@@ -101,9 +90,9 @@ def parse_args():
     parser.add_argument("--starting_checkpoint", type=str, default="checkpoints/fever_sci.ckpt")
     #parser.add_argument("--monitor", type=str, default="valid_sentence_label_f1")
     parser.add_argument("--result_dir", type=str, default="results/lightning_logs")
-    parser.add_argument("--experiment_name", type=str, default="training_longformer")
+    parser.add_argument("--experiment_name", type=str, default="longformer_medfact20k")
     parser.add_argument("--batch_size", type=int, default=4)
-    parser.add_argument("--num_workers", type=int, default=8)
+    parser.add_argument("--num_workers", type=int, default=0)
     parser.add_argument("--mydata", type=int, default=1)
     #parser.add_argument("--accelerator", type=str, default='gpu')
     parser = pl.Trainer.add_argparse_args(parser)
@@ -112,11 +101,12 @@ def parse_args():
 
     args = parser.parse_args()
     args.timestamp = get_timestamp()
-    args.git_checksum = get_checksum()
     return args
 
 
 def main():
+    #gc.collect()
+    #torch.cuda.empty_cache()
     pl.seed_everything(SEED)
 
     args = parse_args()
@@ -150,7 +140,7 @@ def main():
     checkpoint_callback = callbacks.ModelCheckpoint(
         monitor="val_acc", mode="max", save_top_k=1, save_last=True,
         dirpath=checkpoint_dir)
-    early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=10, verbose=False, mode="max")
+    early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=20, verbose=False, mode="max")
     lr_callback = callbacks.LearningRateMonitor(logging_interval="step")
     gpu_callback = callbacks.DeviceStatsMonitor()
     trainer_callbacks = [early_stop_callback, checkpoint_callback, lr_callback, gpu_callback]
@@ -165,12 +155,6 @@ def main():
     # Need `find_unused_paramters=True` to keep training from randomly hanging.
     trainer = pl.Trainer.from_argparse_args(
         args, callbacks=trainer_callbacks, logger=loggers, strategy=strategy, check_val_every_n_epoch=1)
-
-    # If asked to scale the batch size, tune instead of fitting.
-    #if args.auto_scale_batch_size:
-    #    print("Scaling batch size.")
-    #    trainer.tune(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
-    #else:
 
     trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
     print("Evaluating...")

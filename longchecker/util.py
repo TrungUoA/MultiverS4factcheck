@@ -12,11 +12,13 @@ from random import shuffle
 
 from nltk.tokenize import sent_tokenize
 
-def divide_train_val(data, train_frac=0.9):
+def divide_train_val(data, train_frac=0.9, all_frac=1.0):
     train_subsets = []
     val_subsets = []
     for k in data["label"].unique():
         data_k = data[data["label"] == k]
+        if all_frac < 1.0:
+            data_k = data_k.sample(frac=all_frac)
         train_data_k = data_k.sample(frac=train_frac)
         val_data_k = pd.concat([data_k, train_data_k]).drop_duplicates(keep=False)
         train_subsets.append(train_data_k)
@@ -110,3 +112,11 @@ def unbatch(d, ignore=[]):
         res.append(to_append)
 
     return res
+
+def dict2cuda(d, device):
+    for key, value in d.items():
+        if isinstance(value, dict):
+            d[key] = dict2cuda(value, device)
+        else:
+            d[key] = value.to(device)
+    return d
