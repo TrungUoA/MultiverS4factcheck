@@ -177,5 +177,55 @@ def main():
     trainer.test(model, dataloaders=test_dataloader, verbose=True)
     print("Accuracy:" + str(model.metrics[f"metrics_test"].correct_label/len(val_dataloader.dataset)))
 
+def main_other_datasets():
+    pl.seed_everything(SEED)
+
+    args = parse_args()
+
+    # Get the appropriate dataset.
+    train_dataloader, val_dataloader = get_dataloaders(args)
+
+    args.num_training_instances = len(train_dataloader.dataset) #get_num_training_instances(args)
+
+    # Create the model.
+    if args.starting_checkpoint is not None:
+        # Initialize weights from checkpoint and override hyperparams.
+        model = LongCheckerModel.load_from_checkpoint(
+            args.starting_checkpoint, hparams=args)
+    else:
+        # Initialize from scratch.
+        model = LongCheckerModel(args)
+
+    # Loggers
+    save_dir, name, version, checkpoint_dir = get_folder_names(args)
+
+    tb_logger = pl_loggers.TensorBoardLogger(
+        save_dir=save_dir, name=name, version=version)
+    csv_logger = pl_loggers.CSVLogger(
+        save_dir=save_dir, name=name, version=version)
+    loggers = [tb_logger, csv_logger]
+
+    # Checkpointing.
+    checkpoint_callback = callbacks.ModelCheckpoint(
+        monitor="val_acc", mode="max", save_top_k=1, save_last=True,
+        dirpath=checkpoint_dir)
+    #early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=10, verbose=False, mode="max")
+    lr_callback = callbacks.LearningRateMonitor(logging_interval="step")
+    gpu_callback = callbacks.DeviceStatsMonitor()
+    trainer_callbacks = [checkpoint_callback, lr_callback, gpu_callback]
+
+    # DDP pluging fix to keep training from hanging.
+    if args.accelerator == "gpu":
+        strategy = DDPStrategy(find_unused_parameters=True)
+    else:
+        strategy = None
+
+    # Create trainer and fit the model.
+    # Need `find_unused_paramters=True` to keep training from randomly hanging.
+    trainer = pl.Trainer.from_argparse_args(
+        args, callbacks=trainer_callbacks, logger=loggers, strategy=strategy, check_val_every_n_epoch=1)
+
+    trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
+
 if __name__ == "__main__":
     main()

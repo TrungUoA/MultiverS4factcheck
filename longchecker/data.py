@@ -124,7 +124,9 @@ class LongCheckerReader:
         data.rename(columns={data.columns[0]: 'id'}, inplace=True)
         if val_div:
             if val_file is None:
-                train_df, val_df = util.divide_train_val(data, train_frac=0.933)
+                train_df, val_df = util.divide_train_val(data, train_frac=0.93)
+                train_df.to_csv("data/train_sub.csv")
+                val_df.to_csv("data/val_sub.csv")
             else:
                 val_data = pd.read_csv(data_path)
                 val_data.rename(columns={val_data.columns[0]: 'id'}, inplace=True)
@@ -154,11 +156,21 @@ class LongCheckerReader:
                                 "title": candidate_doc["title"]}
                 entry = {"claim_id": claim["id"],
                          "abstract_id": candidate_doc["doc_id"],
+                         "label": self._get_label(claim["evidence"], doc_id),
                          "to_tensorize": to_tensorize}
                 res.append(entry)
 
         return LongCheckerDataset(res, tokenizer)
 
+    def _get_label(self, evidences, doc_id):
+        if(len(evidences)) == 0:
+            return "NOT ENOUGH INFO"
+
+        if str(doc_id) not in evidences.keys() or (len(evidences[str(doc_id)])) == 0:
+            return "NOT ENOUGH INFO"
+        votes = [self.label_map[ev["label"]] for ev in evidences[str(doc_id)]]
+        assert len(set(votes)) == 1
+        return max(set(votes), key=votes.count)
 
 class Collator:
     def __init__(self, tokenizer):
