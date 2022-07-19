@@ -5,27 +5,34 @@ from pathlib import Path
 from model import LongCheckerModel
 from data import get_dataloader
 import util
+from sklearn.metrics import f1_score
+import pytorch_lightning as pl
+from pytorch_lightning.strategies.ddp import DDPStrategy
 
+import numpy as np
+
+def f1_score_func(preds, labels):
+    preds_flat = np.argmax(preds, axis=1).flatten()
+    labels_flat = labels.flatten()
+    return f1_score(labels_flat, preds_flat, average='weighted')
 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint_path", type=str)
     parser.add_argument("--input_file", type=str, default="data/dataset.csv")
     parser.add_argument("--corpus_file", type=str, default=None)
+    parser.add_argument("--test_file", type=str, default="data/test.csv")
     parser.add_argument("--output_file", type=str, default="prediction/result.jsonl")
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--device", default=0, type=int)
-    parser.add_argument("--num_workers", default=4, type=int)
+    parser.add_argument("--num_workers", default=0, type=int)
     parser.add_argument("--mydata", default=1, type=int)
     parser.add_argument(
         "--no_nei", action="store_true", help="If given, never predict NEI."
     )
-    # parser.add_argument(
-    #     "--force_rationale",
-    #     action="store_true",
-    #     help="If given, always predict a rationale for non-NEI.",
-    # )
     parser.add_argument("--debug", action="store_true")
+    parser = pl.Trainer.add_argparse_args(parser)
+    parser = LongCheckerModel.add_model_specific_args(parser)
 
     return parser.parse_args()
 
@@ -34,7 +41,7 @@ def get_predictions(args):
     args = get_args()
 
     # Set up model and data.
-    model = LongCheckerModel.load_from_checkpoint(checkpoint_path=args.checkpoint_path)
+    model = LongCheckerModel.load_from_checkpoint(checkpoint_path=args.checkpoint_path, hparams=args)
     # If not predicting NEI, set the model label threshold to 0.
     if args.no_nei:
         model.label_threshold = 0.0
@@ -51,16 +58,23 @@ def get_predictions(args):
         if hasattr(hparams, k):
             setattr(hparams, k, v)
 
-    dataloader = get_dataloader(args)
+    dataloader = get_dataloader(args, args.test_file)
 
     # Make predictions.
-    predictions_all = []
+    predicted_labels_all = []
+    prediction_all = []
+    labels = []
 
     for batch in tqdm(dataloader):
-        preds_batch = model.predict(batch, args.force_rationale)
-        predictions_all.extend(preds_batch)
+        batch = util.dict2cuda(batch, f"cuda:{args.device}")
+        preds_batch = model( batch["tokenized"], batch["abstract_sent_idx"] )
+        labels.extend(batch["label"])
+        prediction_all.extend(preds_batch["predicted_labels"])
+        predicted_labels_all.extend( model.decode(preds_batch, batch) )
 
-    return predictions_all
+    F1 = f1_score_func(np.array(prediction_all), np.array(labels))
+
+    return predicted_labels_all, F1
 
 
 def format_predictions(args, predictions_all):
@@ -99,12 +113,42 @@ def format_predictions(args, predictions_all):
 def main():
     args = get_args()
     outname = Path(args.output_file)
-    predictions = get_predictions(args)
+    predictions, F1 = get_predictions(args)
+    print("Weighted F1 score is" + F1)
 
     # Save final predictions as json.
     formatted = format_predictions(args, predictions)
     util.write_jsonl(formatted, outname)
 
+def main_with_Trainer():
+    args = get_args()
+
+    # Get the appropriate dataset.
+    test_dataloader = get_dataloader(args, args.test_file)
+    args.num_training_instances = len(test_dataloader.dataset)  # get_num_training_instances(args)
+
+    # Create the model.
+    if args.checkpoint_path is not None:
+        # Initialize weights from checkpoint and override hyperparams.
+        model = LongCheckerModel.load_from_checkpoint(
+            args.checkpoint_path, hparams=args)
+    else:
+        # Initialize from scratch.
+        model = LongCheckerModel(args)
+
+    # DDP pluging fix to keep training from hanging.
+    if args.accelerator == "gpu":
+        strategy = DDPStrategy(find_unused_parameters=True)
+    else:
+        strategy = None
+
+    # Create trainer and fit the model.
+    # Need `find_unused_paramters=True` to keep training from randomly hanging.
+    trainer = pl.Trainer.from_argparse_args(args, strategy=strategy)
+    print("Evaluating...")
+    trainer.test(model, dataloaders=test_dataloader, verbose=True)
+    print("Accuracy:" + str(model.metrics[f"metrics_test"].correct_label / len(test_dataloader.dataset)))
+    #print("F1:" + str(model.metrics[f"metrics_test"].correct_label / len(test_dataloader.dataset)))
 
 if __name__ == "__main__":
-    main()
+    main_with_Trainer()

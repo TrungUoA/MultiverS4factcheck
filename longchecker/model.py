@@ -104,7 +104,7 @@ class LongCheckerModel(pl.LightningModule):
             dropout=dropouts)
 
         # Learning rates.
-        self.lr = 2.5e-6 #hparams.lr #5e-6 works better
+        self.lr = 2.5e-6 #hparams.lr
 
         # Metrics
         fold_names = ["train", "valid", "test"]
@@ -287,7 +287,7 @@ class LongCheckerModel(pl.LightningModule):
         self._log_metrics("train")
         self._log_metrics("valid")
         avg_accuracy = torch.stack(outs).mean()
-        self.log("val_acc", avg_accuracy, prog_bar=True)
+        self.log("val_acc", avg_accuracy)
 
     def test_step(self, batch, batch_idx):
         pred = self(batch["tokenized"], batch["abstract_sent_idx"])
@@ -295,13 +295,16 @@ class LongCheckerModel(pl.LightningModule):
 
         test_acc = torch.sum(pred["predicted_labels"].detach() == batch["label"], dtype=torch.float) / \
                 batch["label"].shape[0]
-        self.log("test_acc", test_acc)
+        self.log("test_acc", test_acc, prog_bar=True)
+        return test_acc
 
-    #def test_epoch_end(self, outs):
-        #"Log metrics at end of test."
-        ## As above, log the train metrics together with the test metrics.
-        #self._log_metrics("train")
-        #self._log_metrics("test")
+    def test_epoch_end(self, outs):
+        "Log metrics at end of test."
+        # As above, log the train metrics together with the test metrics.
+        self._log_metrics("train")
+        self._log_metrics("test")
+        avg_accuracy = torch.stack(outs).mean()
+        self.log("test_acc", avg_accuracy, prog_bar=True)
 
     def _invoke_metrics(self, pred, batch, fold):
         """
@@ -383,7 +386,7 @@ class LongCheckerModel(pl.LightningModule):
                         2: "SUPPORT"}
 
         # Get predicted rationales, only keeping eligible sentences.
-        instances = util.unbatch(batch, ignore=["tokenized"])
+        instances = util.unbatch(batch, ignore=["tokenized", "label"])
         output_unbatched = util.unbatch(output)
 
         predictions = []
