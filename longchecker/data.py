@@ -117,6 +117,9 @@ class LongCheckerReader:
         self.label_map = {"supported": "SUPPORTS",
                           "refuted": "REFUTES", "nei": "NOT ENOUGH INFO"}
 
+    def update_label_map(self, new_map):
+        self.label_map = new_map
+
     def get_mydata(self, tokenizer, data_path, val_file=None, val_div=False):
         """ Get our data """
         # if the csv file is too large, consider reading it as an iterable object with the chunksize argument
@@ -242,6 +245,7 @@ def get_dataloader(predict_args, data_file=None):
     if predict_args.mydata:
         ds = reader.get_mydata(tokenizer, data_file)
     else:
+        reader.update_label_map({"SUPPORT": "SUPPORTS", "CONTRADICT": "REFUTES"})
         ds = reader.get_data(tokenizer)
     collator = Collator(tokenizer)
     return DataLoader(ds,
