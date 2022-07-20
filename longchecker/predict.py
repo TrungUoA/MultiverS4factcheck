@@ -19,7 +19,6 @@ def f1_score_func(preds, labels):
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint_path", type=str)
-    parser.add_argument("--input_file", type=str, default="data/dataset.csv")
     parser.add_argument("--corpus_file", type=str, default=None)
     parser.add_argument("--test_file", type=str, default="data/test.csv")
     parser.add_argument("--output_file", type=str, default="prediction/result.jsonl")
@@ -38,8 +37,6 @@ def get_args():
 
 
 def get_predictions(args):
-    args = get_args()
-
     # Set up model and data.
     model = LongCheckerModel.load_from_checkpoint(checkpoint_path=args.checkpoint_path, hparams=args)
     # If not predicting NEI, set the model label threshold to 0.
@@ -80,7 +77,7 @@ def get_predictions(args):
 def format_predictions(args, predictions_all):
     # Need to get the claim ID's from the original file, since the data loader
     # won't have a record of claims for which no documents were retireved.
-    claims = util.load_jsonl(args.input_file)
+    claims = util.load_jsonl(args.test_file)
     claim_ids = [x["id"] for x in claims]
     assert len(claim_ids) == len(set(claim_ids))
 

@@ -109,8 +109,8 @@ class LongCheckerReader:
     """
     Class to handle SciFact with retrieved documents.
     """
-    def __init__(self, predict_args):
-        self.data_file = predict_args.input_file
+    def __init__(self, predict_args, input_file):
+        self.data_file = input_file
         self.corpus_file = predict_args.corpus_file
         # Basically, I used two different sets of labels. This was dumb, but
         # doing this mapping fixes it.
@@ -232,11 +232,14 @@ class Collator:
         return torch.tensor(res)
 
 
+# read in data and return 1 DataLoader for the dataset in data_file
+# if used for our created dataset, data_file contains all attributes (set --mydata flag 1)
+# if used for existing datasets, data_file has the id(s) to the doc_id in corpus.jsonl (set --mydata flag 0)
 def get_dataloader(predict_args, data_file=None):
     "Main entry point to get the data loader. This can only be used at test time."
-    reader = LongCheckerReader(predict_args)
+    reader = LongCheckerReader(predict_args, data_file)
     tokenizer = get_tokenizer()
-    if predict_args.mydata or data_file is not None:
+    if predict_args.mydata:
         ds = reader.get_mydata(tokenizer, data_file)
     else:
         ds = reader.get_data(tokenizer)
@@ -248,9 +251,11 @@ def get_dataloader(predict_args, data_file=None):
                       shuffle=False,
                       pin_memory=True)
 
+# read in data and return two DataLoader(s) for a training set and a validation/test set
+# only used for our dataset
 def get_dataloaders(predict_args, data_file):
     "Main entry point to get the data loader. This can only be used at test time."
-    reader = LongCheckerReader(predict_args)
+    reader = LongCheckerReader(predict_args, data_file)
     tokenizer = get_tokenizer()
     datasets = reader.get_mydata(tokenizer, data_file, val_div=True)
     collator = Collator(tokenizer)

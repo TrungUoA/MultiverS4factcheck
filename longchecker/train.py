@@ -81,7 +81,6 @@ def get_folder_names(args):
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument("--input_file", type=str, default=None)
     parser.add_argument("--corpus_file", type=str, default=None)
     parser.add_argument("--train_file", type=str, default="data/train.csv")
     parser.add_argument("--val_file", type=str, default="data/val.csv")
@@ -161,13 +160,14 @@ def main():
     trainer.test(model, dataloaders=test_dataloader, verbose=True)
     print("Accuracy:" + str(model.metrics[f"metrics_test"].correct_label/len(val_dataloader.dataset)))
 
-def main_other_datasets():
+def main_existing_datasets():
     pl.seed_everything(SEED)
 
     args = parse_args()
 
     # Get the appropriate dataset.
-    train_dataloader, val_dataloader = get_dataloaders(args)
+    train_dataloader = get_dataloader(args, args.train_file)
+    test_dataloader = get_dataloader(args, args.test_file)
 
     args.num_training_instances = len(train_dataloader.dataset) #get_num_training_instances(args)
 
@@ -209,7 +209,9 @@ def main_other_datasets():
     trainer = pl.Trainer.from_argparse_args(
         args, callbacks=trainer_callbacks, logger=loggers, strategy=strategy, check_val_every_n_epoch=1)
 
-    trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
+    trainer.fit(model, train_dataloaders=train_dataloader)
+    print("Evaluating...")
+    trainer.test(model, dataloaders=test_dataloader, verbose=True)
 
 if __name__ == "__main__":
-    main()
+    main_existing_datasets()
