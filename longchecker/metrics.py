@@ -28,7 +28,7 @@ def compute_f1(relevant, retrieved, correct, prefix):
             f"{prefix}_f1": f1}
 
 def compute_weighted_f1(preds, labels):
-    return f1_score(labels.flatten(), preds.flatten(), average='weighted')
+    return f1_score(labels.flatten().cpu(), preds.flatten().cpu(), average='weighted')
 
 # def has_correct_rationale_abstract(pred, gold):
 #     """

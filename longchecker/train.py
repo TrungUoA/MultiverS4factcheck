@@ -190,9 +190,7 @@ def main_existing_datasets():
     loggers = [tb_logger, csv_logger]
 
     # Checkpointing.
-    checkpoint_callback = callbacks.ModelCheckpoint(
-        monitor="label_loss", mode="min", save_top_k=1, save_last=True,
-        dirpath=checkpoint_dir)
+    checkpoint_callback = callbacks.ModelCheckpoint(save_last=True, dirpath=checkpoint_dir)
     #early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=10, verbose=False, mode="max")
     lr_callback = callbacks.LearningRateMonitor(logging_interval="step")
     gpu_callback = callbacks.DeviceStatsMonitor()
