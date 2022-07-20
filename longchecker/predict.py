@@ -147,8 +147,6 @@ def main_with_Trainer():
     trainer = pl.Trainer.from_argparse_args(args, strategy=strategy)
     print("Evaluating...")
     trainer.test(model, dataloaders=test_dataloader, verbose=True)
-    print("Accuracy:" + str(model.metrics[f"metrics_test"].correct_label / len(test_dataloader.dataset)))
-    #print("F1:" + str(model.metrics[f"metrics_test"].correct_label / len(test_dataloader.dataset)))
 
 if __name__ == "__main__":
     main_with_Trainer()

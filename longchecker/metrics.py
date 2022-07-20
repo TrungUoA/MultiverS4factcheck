@@ -6,6 +6,7 @@ Implement metrics from the SciFact paper.
 import torch
 
 from torchmetrics import Metric
+from sklearn.metrics import f1_score
 
 NEI = 1    # Label for NEI class.
 MAX_ABSTRACT_SENTS = 3   # Max number of abstract sentences.
@@ -26,6 +27,8 @@ def compute_f1(relevant, retrieved, correct, prefix):
             f"{prefix}_recall": recall,
             f"{prefix}_f1": f1}
 
+def compute_weighted_f1(preds, labels):
+    return f1_score(labels.flatten(), preds.flatten(), average='weighted')
 
 # def has_correct_rationale_abstract(pred, gold):
 #     """
@@ -68,6 +71,8 @@ class SciFactMetrics(Metric):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.add_state("preds", default=torch.tensor([]))
+        self.add_state("truth", default=torch.tensor([]))
         names = ["correct_label",
                  "total_label",
                  "relevant_abstract_label",
@@ -88,6 +93,8 @@ class SciFactMetrics(Metric):
     def update(self, preds, target):
         pred_labs = preds["predicted_labels"]
         gold_labs = target["label"]
+        self.preds = torch.cat((self.preds, pred_labs))
+        self.truth = torch.cat((self.truth, gold_labs))
         #pred_rats = preds["predicted_rationales"]
         #gold_rats = target["rationale_sets"]
         #rationale_mask = target["rationale_mask"]
@@ -135,6 +142,7 @@ class SciFactMetrics(Metric):
     def compute(self):
         res = {}
         res.update({"label_accuracy": (self.correct_label / self.total_label)})
+        res.update({"weighted_f1": compute_weighted_f1(self.preds, self.truth)})
         res.update(compute_f1(
             self.relevant_abstract_label, self.retrieved_abstract_label,
             self.correct_abstract_label, "abstract_label_only"))
