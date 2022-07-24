@@ -72,10 +72,11 @@ def write_jsonl(data, fname):
 
 
 def get_longformer_science_checkpoint():
-    current_dir = pathlib.Path(os.path.realpath(__file__)).parent
-    fname = current_dir.parent / "checkpoints/longformer_large_science.ckpt"
-
-    return str(fname)
+    # current_dir = pathlib.Path(os.path.realpath(__file__)).parent
+    # fname = current_dir.parent / "checkpoints/longformer_large_science.ckpt"
+    #
+    # return str(fname)
+    return "/home/tugn232/projects/multivers/checkpoints/longformer_large_science.ckpt"
 
 
 def unbatch(d, ignore=[]):

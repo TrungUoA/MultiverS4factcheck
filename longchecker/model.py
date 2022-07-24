@@ -104,7 +104,7 @@ class LongCheckerModel(pl.LightningModule):
             dropout=dropouts)
 
         # Learning rates.
-        self.lr = 2.5e-6 #hparams.lr
+        self.lr = hparams.lr
 
         # Metrics
         fold_names = ["train", "valid", "test"]
@@ -129,7 +129,7 @@ class LongCheckerModel(pl.LightningModule):
         parser.add_argument("--rationale_weight", type=float, default=15.0)
         parser.add_argument("--num_labels", type=int, default=3)
         parser.add_argument("--gradient_checkpointing", action="store_true")
-        parser.add_argument("--lr", type=float, default=5e-5)
+        parser.add_argument("--lr", type=float, default=2.5e-6)
         parser.add_argument("--frac_warmup", type=float, default=0.1,
                             help="The fraction of training to use for warmup.")
         parser.add_argument("--scheduler_total_epochs", default=None, type=int,

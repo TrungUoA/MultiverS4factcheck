@@ -92,7 +92,9 @@ def parse_args():
     parser.add_argument("--experiment_name", type=str, default="longformer_medfact20k")
     parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--num_workers", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--mydata", type=int, default=1)
+    parser.add_argument("--early_stopping", type=int, default=0)
     #parser.add_argument("--accelerator", type=str, default='gpu')
     parser = pl.Trainer.add_argparse_args(parser)
     parser = LongCheckerModel.add_model_specific_args(parser)
@@ -104,27 +106,8 @@ def parse_args():
 
 
 def main():
-    #gc.collect()
-    #torch.cuda.empty_cache()
-    pl.seed_everything(SEED)
-
     args = parse_args()
-
-    # Get the appropriate dataset.
-    #data_module = dm.ConcatDataModule(args)
-    train_dataloader, val_dataloader = get_dataloaders(args, args.train_file)
-    test_dataloader = get_dataloader(args, args.test_file)
-
-    args.num_training_instances = len(train_dataloader.dataset) #get_num_training_instances(args)
-
-    # Create the model.
-    if args.starting_checkpoint is not None:
-        # Initialize weights from checkpoint and override hyperparams.
-        model = LongCheckerModel.load_from_checkpoint(
-            args.starting_checkpoint, hparams=args)
-    else:
-        # Initialize from scratch.
-        model = LongCheckerModel(args)
+    pl.seed_everything(args.seed)
 
     # Loggers
     save_dir, name, version, checkpoint_dir = get_folder_names(args)
@@ -139,10 +122,30 @@ def main():
     checkpoint_callback = callbacks.ModelCheckpoint(
         monitor="val_acc", mode="max", save_top_k=1, save_last=True,
         dirpath=checkpoint_dir)
-    early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=20, verbose=False, mode="max")
     lr_callback = callbacks.LearningRateMonitor(logging_interval="step")
     gpu_callback = callbacks.DeviceStatsMonitor()
-    trainer_callbacks = [early_stop_callback, checkpoint_callback, lr_callback, gpu_callback]
+
+    # Get the appropriate dataset.
+    if args.mydata and args.early_stopping:
+        train_dataloader, val_dataloader = get_dataloaders(args, args.train_file)
+        early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=20, verbose=False, mode="max")
+        trainer_callbacks = [early_stop_callback, checkpoint_callback, lr_callback, gpu_callback]
+    else:
+        train_dataloader = get_dataloader(args, args.train_file)
+        val_dataloader = None
+        trainer_callbacks = [checkpoint_callback, lr_callback, gpu_callback]
+    test_dataloader = get_dataloader(args, args.test_file)
+
+    args.num_training_instances = len(train_dataloader.dataset) #get_num_training_instances(args)
+
+    # Create the model.
+    if args.starting_checkpoint is not None:
+        # Initialize weights from checkpoint and override hyperparams.
+        model = LongCheckerModel.load_from_checkpoint(
+            args.starting_checkpoint, hparams=args)
+    else:
+        # Initialize from scratch.
+        model = LongCheckerModel(args)
 
     # DDP pluging fix to keep training from hanging.
     if args.accelerator == "gpu":
@@ -158,58 +161,7 @@ def main():
     trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
     print("Evaluating...")
     trainer.test(model, dataloaders=test_dataloader, verbose=True)
-    print("Accuracy:" + str(model.metrics[f"metrics_test"].correct_label/len(val_dataloader.dataset)))
-
-def main_existing_datasets():
-    pl.seed_everything(SEED)
-
-    args = parse_args()
-
-    # Get the appropriate dataset.
-    train_dataloader = get_dataloader(args, args.train_file)
-    test_dataloader = get_dataloader(args, args.test_file)
-
-    args.num_training_instances = len(train_dataloader.dataset) #get_num_training_instances(args)
-
-    # Create the model.
-    if args.starting_checkpoint is not None:
-        # Initialize weights from checkpoint and override hyperparams.
-        model = LongCheckerModel.load_from_checkpoint(
-            args.starting_checkpoint, hparams=args)
-    else:
-        # Initialize from scratch.
-        model = LongCheckerModel(args)
-
-    # Loggers
-    save_dir, name, version, checkpoint_dir = get_folder_names(args)
-
-    tb_logger = pl_loggers.TensorBoardLogger(
-        save_dir=save_dir, name=name, version=version)
-    csv_logger = pl_loggers.CSVLogger(
-        save_dir=save_dir, name=name, version=version)
-    loggers = [tb_logger, csv_logger]
-
-    # Checkpointing.
-    checkpoint_callback = callbacks.ModelCheckpoint(save_last=True, dirpath=checkpoint_dir)
-    #early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=10, verbose=False, mode="max")
-    lr_callback = callbacks.LearningRateMonitor(logging_interval="step")
-    gpu_callback = callbacks.DeviceStatsMonitor()
-    trainer_callbacks = [checkpoint_callback, lr_callback, gpu_callback]
-
-    # DDP pluging fix to keep training from hanging.
-    if args.accelerator == "gpu":
-        strategy = DDPStrategy(find_unused_parameters=True)
-    else:
-        strategy = None
-
-    # Create trainer and fit the model.
-    # Need `find_unused_paramters=True` to keep training from randomly hanging.
-    trainer = pl.Trainer.from_argparse_args(
-        args, callbacks=trainer_callbacks, logger=loggers, strategy=strategy, check_val_every_n_epoch=1)
-
-    trainer.fit(model, train_dataloaders=train_dataloader)
-    print("Evaluating...")
-    trainer.test(model, dataloaders=test_dataloader, verbose=True)
+    print("Accuracy:" + str(model.metrics[f"metrics_test"].correct_label/len(test_dataloader.dataset)))
 
 if __name__ == "__main__":
-    main_existing_datasets()
+    main()

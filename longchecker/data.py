@@ -146,6 +146,9 @@ class LongCheckerReader:
         Get the data for the relevant fold.
         """
         res = []
+        # df_claims = []
+        # df_abstracts = []
+        # df_labels = []
 
         corpus = util.load_jsonl(self.corpus_file)
         corpus_dict = {x["doc_id"]: x for x in corpus}
@@ -162,7 +165,11 @@ class LongCheckerReader:
                          "label": self._get_label(claim["evidence"], doc_id),
                          "to_tensorize": to_tensorize}
                 res.append(entry)
-
+        #         df_claims.append(claim["claim"])
+        #         df_abstracts.append(" ".join(candidate_doc["abstract"]))
+        #         df_labels.append(self._get_label(claim["evidence"], doc_id))
+        # to_save_df = pd.DataFrame({"claim": df_claims, "exp": df_abstracts, "label": df_labels})
+        # to_save_df.to_csv("data/" + self.data_file.split("/")[-1].split(".")[0] + "_formatted.csv")
         return LongCheckerDataset(res, tokenizer)
 
     def _get_label(self, evidences, doc_id):
