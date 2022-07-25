@@ -125,6 +125,7 @@ class LongCheckerReader:
         # if the csv file is too large, consider reading it as an iterable object with the chunksize argument
         data = pd.read_csv(data_path)
         data.rename(columns={data.columns[0]: 'id'}, inplace=True)
+        #data.to_csv("data/train_selected.csv")
         if val_div:
             if val_file is None:
                 train_df, val_df = util.divide_train_val(data, train_frac=0.93)

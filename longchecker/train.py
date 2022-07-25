@@ -126,7 +126,7 @@ def main():
     gpu_callback = callbacks.DeviceStatsMonitor()
 
     # Get the appropriate dataset.
-    if args.mydata and args.early_stopping:
+    if args.early_stopping:
         train_dataloader, val_dataloader = get_dataloaders(args, args.train_file)
         early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=20, verbose=False, mode="max")
         trainer_callbacks = [early_stop_callback, checkpoint_callback, lr_callback, gpu_callback]
